@@ -564,7 +564,7 @@ static void MSLEndDocument(void *context)
 #endif
 }
 
-static void MSLPushImage(MSLInfo *msl_info,Image *image)
+static ssize_t MSLPushImage(MSLInfo *msl_info,Image *image)
 {
   ssize_t
     n;
@@ -598,6 +598,7 @@ static void MSLPushImage(MSLInfo *msl_info,Image *image)
     ThrowFatalException(ResourceLimitFatalError,"MemoryAllocationFailed");
   if (msl_info->number_groups != 0)
     msl_info->group_info[msl_info->number_groups-1].numImages++;
+  return(n);
 }
 
 static void MSLPopImage(MSLInfo *msl_info)
@@ -674,7 +675,6 @@ static void MSLStartElement(void *context,const xmlChar *tag,
   */
   (void) LogMagickEvent(CoderEvent,GetMagickModule(),
     "  SAX.startElement(%s",tag);
-  exception=AcquireExceptionInfo();
   msl_info=(MSLInfo *) context;
   if (msl_info->depth++ > MagickMaxRecursionDepth)
     {        
@@ -683,6 +683,7 @@ static void MSLStartElement(void *context,const xmlChar *tag,
       xmlStopParser((xmlParserCtxtPtr) context);
       return;
     }
+  exception=AcquireExceptionInfo();
   n=msl_info->n;
   keyword=(const char *) NULL;
   value=(char *) NULL;
@@ -1928,7 +1929,7 @@ static void MSLStartElement(void *context,const xmlChar *tag,
 
                       attribute=GetImageProperty(msl_info->attributes[j],"id");
                       if ((attribute != (const char *) NULL)  &&
-                          (LocaleCompare(value,value) == 0))
+                          (LocaleCompare(attribute,value) == 0))
                         {
                           SetImageType(composite_image,TrueColorMatteType);
                           (void) CompositeImage(composite_image,
@@ -3392,7 +3393,7 @@ static void MSLStartElement(void *context,const xmlChar *tag,
     {
       if (LocaleCompare((const char *) tag,"image") == 0)
         {
-          MSLPushImage(msl_info,(Image *) NULL);
+          n=MSLPushImage(msl_info,(Image *) NULL);
           if (attributes == (const xmlChar **) NULL)
             break;
           for (i=0; (attributes[i] != (const xmlChar *) NULL); i++)
@@ -8050,6 +8051,7 @@ ModuleExport size_t RegisterMSLImage(void)
   entry->encoder=(EncodeImageHandler *) WriteMSLImage;
 #endif
   entry->format_type=ImplicitFormatType;
+  entry->thread_support^=DecoderThreadSupport;
   entry->description=ConstantString("Magick Scripting Language");
   entry->magick_module=ConstantString("MSL");
   (void) RegisterMagickInfo(entry);

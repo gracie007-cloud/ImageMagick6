@@ -2988,14 +2988,24 @@ static void SVGEndElement(void *context,const xmlChar *name)
     {
       if (LocaleCompare((const char *) name,"image") == 0)
         {
+          char
+            *text;
+
           Image
             *image;
 
           ImageInfo
             *image_info = AcquireImageInfo();
-  
+
+          if (svg_info->url == (char*) NULL)
+            {
+              image_info=DestroyImageInfo(image_info);
+              (void) FormatLocaleFile(svg_info->file,"pop graphic-context\n");
+              break;
+            }
           if (GetValueFromSplayTree(svg_tree,svg_info->url) != (const char *) NULL)
             {
+              image_info=DestroyImageInfo(image_info);
               (void) ThrowMagickException(svg_info->exception,GetMagickModule(),
                 DrawError,"VectorGraphicsNestedTooDeeply","`%s'",svg_info->url);
               break;
@@ -3007,11 +3017,14 @@ static void SVGEndElement(void *context,const xmlChar *name)
           image=ReadImage(image_info,svg_info->exception);
           if (image != (Image *) NULL)
             image=DestroyImage(image);
+          image_info=DestroyImageInfo(image_info);
           (void) DeleteNodeFromSplayTree(svg_tree,svg_info->url);
+          text=EscapeString(svg_info->url,'\"');
           (void) FormatLocaleFile(svg_info->file,
             "image Over %g,%g %g,%g \"%s\"\n",svg_info->bounds.x,
             svg_info->bounds.y,svg_info->bounds.width,svg_info->bounds.height,
-            svg_info->url);
+            text);
+          text=DestroyString(text);
           (void) FormatLocaleFile(svg_info->file,"pop graphic-context\n");
           break;
         }
@@ -3224,11 +3237,15 @@ static void SVGEndElement(void *context,const xmlChar *name)
     {
       if (LocaleCompare((char *) name,"use") == 0)
         {
+          char
+            *text;
+
           if ((svg_info->bounds.x != 0.0) || (svg_info->bounds.y != 0.0))
             (void) FormatLocaleFile(svg_info->file,"translate %g,%g\n",
               svg_info->bounds.x,svg_info->bounds.y);
-          (void) FormatLocaleFile(svg_info->file,"use \"url(%s)\"\n",
-            svg_info->url);
+          text=EscapeString(svg_info->url,'\"');
+          (void) FormatLocaleFile(svg_info->file,"use \"url(%s)\"\n",text);
+          text=DestroyString(text);
           (void) FormatLocaleFile(svg_info->file,"pop graphic-context\n");
           break;
         }
@@ -3845,6 +3862,7 @@ ModuleExport size_t RegisterSVGImage(void)
   entry->encoder=(EncodeImageHandler *) WriteSVGImage;
   entry->seekable_stream=MagickFalse;
   entry->blob_support=MagickFalse;
+  entry->thread_support^=DecoderThreadSupport;
   entry->description=ConstantString("Scalable Vector Graphics");
   entry->mime_type=ConstantString("image/svg+xml");
   if (*version != '\0')
@@ -3859,6 +3877,7 @@ ModuleExport size_t RegisterSVGImage(void)
   entry->encoder=(EncodeImageHandler *) WriteSVGImage;
   entry->seekable_stream=MagickFalse;
   entry->blob_support=MagickFalse;
+  entry->thread_support^=DecoderThreadSupport;
   entry->description=ConstantString("Compressed Scalable Vector Graphics");
   entry->mime_type=ConstantString("image/svg+xml");
   if (*version != '\0')
@@ -3873,6 +3892,7 @@ ModuleExport size_t RegisterSVGImage(void)
   entry->encoder=(EncodeImageHandler *) WriteSVGImage;
   entry->seekable_stream=MagickFalse;
   entry->blob_support=MagickFalse;
+  entry->thread_support^=DecoderThreadSupport;
   entry->description=ConstantString("ImageMagick's own SVG internal renderer");
   entry->magick=(IsImageFormatHandler *) IsSVG;
   entry->magick_module=ConstantString("SVG");

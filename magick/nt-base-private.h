@@ -30,6 +30,56 @@ extern "C" {
 
 #if defined(MAGICKCORE_WINDOWS_SUPPORT)
 
+#if !defined(closedir)
+#  define closedir(directory)  NTCloseDirectory(directory)
+#endif
+#if !defined(MAGICKCORE_LTDL_DELEGATE)
+#if !defined(lt_dlclose)
+#  define lt_dlclose(handle)  NTCloseLibrary(handle)
+#endif
+#if !defined(lt_dlerror)
+#  define lt_dlerror()  NTGetLibraryError()
+#endif
+#if !defined(lt_dlopen)
+#  define lt_dlopen(filename)  NTOpenLibrary(filename)
+#endif
+#if !defined(lt_dlsym)
+#  define lt_dlsym(handle,name)  NTGetLibrarySymbol(handle,name)
+#endif
+#endif
+#if !defined(opendir)
+#  define opendir(directory)  NTOpenDirectory(directory)
+#endif
+#if !defined(read)
+#  define read(fd,buffer,count)  _read(fd,buffer,(unsigned int) count)
+#endif
+#if !defined(readdir)
+#  define readdir(directory)  NTReadDirectory(directory)
+#endif
+#if !defined(sysconf)
+#  define sysconf(name)  NTSystemConfiguration(name)
+#  define MAGICKCORE_HAVE_SYSCONF 1
+#endif
+#if !defined(write)
+#  define write(fd,buffer,count)  _write(fd,buffer,(unsigned int) count)
+#endif
+#if !defined(__MINGW32__)
+#  define fdopen  _fdopen
+#  define fileno  _fileno
+#  define fseek   _fseeki64
+#  define ftell   _ftelli64
+#  define getpid  _getpid
+#if !defined(getcwd)
+#  define getcwd  _getcwd
+#endif
+#  define lseek   _lseeki64
+#  define fstat   _fstat64
+#  define setmode _setmode
+#  define stat    _stat64
+#  define tell    _telli64
+#  define wstat   _wstat64
+#endif
+
 #if !defined(XS_VERSION)
 struct dirent
 {
@@ -62,6 +112,9 @@ struct timezone
     tz_minuteswest,
     tz_dsttime;
 };
+
+typedef int
+  mode_t;
 #endif
 
 #endif
@@ -86,6 +139,9 @@ static inline void *NTAcquireQuantumMemory(const size_t count,
   return(AcquireMagickMemory(size));
 }
 
+extern MagickExport char
+  *NTRealPathWide(const char *);
+
 extern MagickPrivate char
   *NTGetEnvironmentValue(const char *);
 
@@ -104,6 +160,18 @@ extern MagickPrivate DIR
 extern MagickPrivate double
   NTElapsedTime(void),
   NTUserTime(void);
+
+extern MagickExport FILE
+  *NTOpenFileWide(const char *,const char *),
+  *NTOpenPipeWide(const char *,const char *);
+
+extern MagickExport int
+  NTAccessWide(const char *,int),
+  NTOpenWide(const char *,int,mode_t),
+  NTRemoveWide(const char *),
+  NTRenameWide(const char *, const char *),
+  NTSetFileTimestamp(const char *,struct stat *),
+  NTStatWide(const char *,struct stat *);
 
 extern MagickPrivate int
 #if !defined(__MINGW32__)
@@ -147,6 +215,9 @@ extern MagickPrivate void
   *NTOpenLibrary(const char *),
   NTWindowsGenesis(void),
   NTWindowsTerminus(void);
+
+extern MagickExport wchar_t
+  *NTCreateWidePath(const char *);
 
 #endif /* !XS_VERSION */
 

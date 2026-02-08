@@ -559,7 +559,7 @@ static MagickBooleanType GetMagickModulePath(const char *filename,
     {
       (void) LogMagickEvent(ModuleEvent,GetMagickModule(),
         "Searching for filter module file \"%s\" ...",filename);
-      module_path=GetEnvironmentValue("MAGICK_CODER_FILTER_PATH");
+      module_path=GetEnvironmentValue("MAGICK_FILTER_MODULE_PATH");
 #if defined(MAGICKCORE_FILTER_PATH)
       if (module_path == (char *) NULL)
         module_path=AcquireString(MAGICKCORE_FILTER_PATH);
@@ -913,9 +913,11 @@ static MagickBooleanType IsModuleTreeInstantiated(
           if (status == MagickFalse)
             ThrowFatalException(ResourceLimitFatalError,
               "MemoryAllocationFailed");
+#if defined(MAGICKCORE_LTDL_DELEGATE)
           if (lt_dlinit() != 0)
             ThrowFatalException(ModuleFatalError,
               "UnableToInitializeModuleLoader");
+#endif
           module_list=splay_tree;
         }
       UnlockSemaphoreInfo(module_semaphore);
