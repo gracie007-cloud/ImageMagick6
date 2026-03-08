@@ -273,11 +273,9 @@ static char *super_fgets(char **b, size_t *blen, Image *file)
         tlen=(size_t) (q-p);
         len<<=1;
         buffer=(unsigned char *) ResizeQuantumMemory(p,len+2UL,sizeof(*p));
+        p=(unsigned char *) NULL;
         if (buffer == (unsigned char *) NULL)
-          {
-            p=(unsigned char *) RelinquishMagickMemory(p);
-            break;
-          }
+          break;
         p=buffer;
         q=p+tlen;
       }
@@ -606,11 +604,9 @@ static char *super_fgets_w(char **b, size_t *blen, Image *file)
         tlen=(size_t) (q-p);
         len<<=1;
         buffer=(unsigned char *) ResizeQuantumMemory(p,len+2,sizeof(*p));
+        p=(unsigned char *) NULL;
         if (buffer == (unsigned char *) NULL)
-          {
-            p=(unsigned char *) RelinquishMagickMemory(p);
-            break;
-          }
+          break;
         p=buffer;
         q=p+tlen;
       }
@@ -618,7 +614,7 @@ static char *super_fgets_w(char **b, size_t *blen, Image *file)
   }
   *b=(char *) p;
   *blen=0;
-  if ((*b) != (char *) NULL)
+  if (p != (unsigned char *) NULL)
     {
       size_t
         tlen;
@@ -1953,14 +1949,13 @@ static const tag_spec tags[] = {
   { 219, "Custom Field 20" }
 };
 
-static int formatIPTC(Image *ifile, Image *ofile)
+static void formatIPTC(Image *ifile, Image *ofile)
 {
   char
     temp[MaxTextExtent];
 
   unsigned int
-    foundiptc,
-    tagsfound;
+    foundiptc;
 
   unsigned char
     recnum,
@@ -1982,9 +1977,8 @@ static int formatIPTC(Image *ifile, Image *ofile)
     c;
 
   foundiptc = 0; /* found the IPTC-Header */
-  tagsfound = 0; /* number of tags found */
 
-  c = ReadBlobByte(ifile);
+  c=ReadBlobByte(ifile);
   while (c != EOF)
   {
     if (c == 0x1c)
@@ -1992,22 +1986,22 @@ static int formatIPTC(Image *ifile, Image *ofile)
     else
       {
         if (foundiptc)
-          return(-1);
+          return;
         else
           {
-            c=0;
+            c=ReadBlobByte(ifile);
             continue;
           }
       }
 
     /* we found the 0x1c tag and now grab the dataset and record number tags */
-    c = ReadBlobByte(ifile);
+    c=ReadBlobByte(ifile);
     if (c == EOF)
-      return(-1);
+      return;
     dataset = (unsigned char) c;
-    c = ReadBlobByte(ifile);
+    c=ReadBlobByte(ifile);
     if (c == EOF)
-      return(-1);
+      return;
     recnum = (unsigned char) c;
     /* try to match this record to one of the ones in our named table */
     for (i=0; i< tagcount; i++)
@@ -2024,9 +2018,9 @@ static int formatIPTC(Image *ifile, Image *ofile)
     */
     c=ReadBlobByte(ifile);
     if (c == EOF)
-      return(-1);
+      return;
     if (c & (unsigned char) 0x80)
-      return(0);
+      return;
     else
       {
         int
@@ -2034,18 +2028,18 @@ static int formatIPTC(Image *ifile, Image *ofile)
 
         c0=ReadBlobByte(ifile);
         if (c0 == EOF)
-          return(-1);
+          return;
         taglen = (c << 8) | c0;
       }
     if (taglen < 0)
-      return(-1);
+      return;
     /* make a buffer to hold the tag datand snag it from the input stream */
     str=(unsigned char *) AcquireQuantumMemory((size_t) (taglen+MaxTextExtent),
       sizeof(*str));
     if (str == (unsigned char *) NULL)
       {
         (void) printf("MemoryAllocationFailed");
-        return 0;
+        return;
       }
     for (tagindx=0; tagindx<taglen; tagindx++)
     {
@@ -2053,7 +2047,7 @@ static int formatIPTC(Image *ifile, Image *ofile)
       if (c == EOF)
         {
           str=(unsigned char *) RelinquishMagickMemory(str);
-          return(-1);
+          return;
         }
       str[tagindx] = (unsigned char) c;
     }
@@ -2069,12 +2063,8 @@ static int formatIPTC(Image *ifile, Image *ofile)
     (void) WriteBlobString(ofile,temp);
     formatString( ofile, (char *)str, taglen );
     str=(unsigned char *) RelinquishMagickMemory(str);
-
-    tagsfound++;
-
     c=ReadBlobByte(ifile);
   }
-  return((int) tagsfound);
 }
 
 static int readWordFromBuffer(char **s, ssize_t *len)

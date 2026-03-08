@@ -89,6 +89,7 @@
 #include "magick/string_.h"
 #include "magick/string-private.h"
 #include "magick/transform.h"
+#include "magick/thread-private.h"
 #include "magick/threshold.h"
 #include "magick/utility.h"
 #include "magick/visual-effects.h"
@@ -158,9 +159,6 @@ static SplayTreeInfo
   Forward declarations.
 */
 #if defined(MAGICKCORE_XML_DELEGATE)
-static MagickBooleanType
-  WriteMSLImage(const ImageInfo *,Image *);
-
 static MagickBooleanType
   SetMSLAttributes(MSLInfo *,const char *,const char *);
 #endif
@@ -3383,6 +3381,13 @@ static void MSLStartElement(void *context,const xmlChar *tag,
       msl_info->group_info=(MSLGroupInfo *) ResizeQuantumMemory(
         msl_info->group_info,msl_info->number_groups+1UL,
         sizeof(*msl_info->group_info));
+      if (msl_info->group_info == (MSLGroupInfo *) NULL)
+        {
+          ThrowMSLException(ResourceLimitFatalError,
+            "UnableToInterpretMSLImage",tag);
+          break;
+        }
+      msl_info->group_info[msl_info->number_groups-1].numImages=0;
       break;
     }
       ThrowMSLException(OptionError,"UnrecognizedElement",(const char *) tag);
@@ -3712,10 +3717,13 @@ static void MSLStartElement(void *context,const xmlChar *tag,
             }
           quantize_info=AcquireQuantizeInfo(msl_info->image_info[n]);
           quantize_info->dither=dither;
-          (void) RemapImages(quantize_info,msl_info->image[n],
-            affinity_image);
+          if (affinity_image != (Image *) NULL)
+            {
+              (void) RemapImages(quantize_info,msl_info->image[n],
+                affinity_image);
+              affinity_image=DestroyImage(affinity_image);
+            }
           quantize_info=DestroyQuantizeInfo(quantize_info);
-          affinity_image=DestroyImage(affinity_image);
           break;
         }
       if (LocaleCompare((const char *) tag,"matte-floodfill") == 0)
@@ -5081,25 +5089,28 @@ static void MSLStartElement(void *context,const xmlChar *tag,
               {
                 if (LocaleCompare(keyword,"filename") == 0)
                   {
+                    char
+                      thread_filename[MagickPathExtent];
+
                     Image
                       *next = (Image *) NULL;
 
                     if (value == (char *) NULL)
                       break;
-                    if (GetValueFromSplayTree(msl_tree,value) != (const char *) NULL)
+                    GetMagickThreadFilename(value,thread_filename);
+                    if (GetValueFromSplayTree(msl_tree,thread_filename) != (const char *) NULL)
                       {
                         (void) ThrowMagickException(msl_info->exception,
                           GetMagickModule(),DrawError,
                           "VectorGraphicsNestedTooDeeply","`%s'",value);
                         break;
                       }
-                    (void) AddValueToSplayTree(msl_tree,ConstantString(value),
-                      (void *) 1);
+                    (void) AddValueToSplayTree(msl_tree,ConstantString(
+                      thread_filename),(void *) 1);
                     *msl_info->image_info[n]->magick='\0';
                     (void) CopyMagickString(msl_info->image_info[n]->filename,
                       value,MagickPathExtent);
                     next=ReadImage(msl_info->image_info[n],exception);
-                    (void) DeleteNodeFromSplayTree(msl_tree,value);
                     CatchException(exception);
                     if (next == (Image *) NULL)
                       continue;
@@ -7502,8 +7513,19 @@ static void MSLEndElement(void *context,const xmlChar *tag)
     case 'i':
     {
       if (LocaleCompare((const char *) tag, "image") == 0)
-        MSLPopImage(msl_info);
-       break;
+        {
+          if (msl_info->image_info[msl_info->n] != (ImageInfo *) NULL)
+            {
+              char
+                thread_filename[MagickPathExtent];
+
+              GetMagickThreadFilename(
+                msl_info->image_info[msl_info->n]->filename,thread_filename);
+              (void) DeleteNodeFromSplayTree(msl_tree,thread_filename);
+            }
+          MSLPopImage(msl_info);
+        }
+      break;
     }
     case 'L':
     case 'l':
@@ -8048,10 +8070,8 @@ ModuleExport size_t RegisterMSLImage(void)
   entry=SetMagickInfo("MSL");
 #if defined(MAGICKCORE_XML_DELEGATE)
   entry->decoder=(DecodeImageHandler *) ReadMSLImage;
-  entry->encoder=(EncodeImageHandler *) WriteMSLImage;
 #endif
   entry->format_type=ImplicitFormatType;
-  entry->thread_support^=DecoderThreadSupport;
   entry->description=ConstantString("Magick Scripting Language");
   entry->magick_module=ConstantString("MSL");
   (void) RegisterMagickInfo(entry);
@@ -8375,49 +8395,3 @@ ModuleExport void UnregisterMSLImage(void)
   if (msl_tree != (SplayTreeInfo *) NULL)
     msl_tree=DestroySplayTree(msl_tree);
 }
-
-#if defined(MAGICKCORE_XML_DELEGATE)
-/*
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%                                                                             %
-%                                                                             %
-%                                                                             %
-%   W r i t e M S L I m a g e                                                 %
-%                                                                             %
-%                                                                             %
-%                                                                             %
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%
-%  WriteMSLImage() writes an image to a file in MVG image format.
-%
-%  The format of the WriteMSLImage method is:
-%
-%      MagickBooleanType WriteMSLImage(const ImageInfo *image_info,Image *image)
-%
-%  A description of each parameter follows.
-%
-%    o image_info: the image info.
-%
-%    o image:  The image.
-%
-*/
-static MagickBooleanType WriteMSLImage(const ImageInfo *image_info,Image *image)
-{
-  Image
-    *msl_image;
-
-  MagickBooleanType
-    status;
-
-  assert(image_info != (const ImageInfo *) NULL);
-  assert(image_info->signature == MagickCoreSignature);
-  assert(image != (Image *) NULL);
-  assert(image->signature == MagickCoreSignature);
-  if (IsEventLogging() != MagickFalse)
-    (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",image->filename);
-  msl_image=CloneImage(image,0,0,MagickTrue,&image->exception);
-  status=ProcessMSLScript(image_info,&msl_image,&image->exception);
-  msl_image=DestroyImage(msl_image);
-  return(status);
-}
-#endif

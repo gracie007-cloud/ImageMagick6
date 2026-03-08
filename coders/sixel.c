@@ -486,7 +486,7 @@ MagickBooleanType sixel_decode(Image *image,
                     for (i = 0; i < 6; i++) {
                         if ((b & sixel_vertical_mask) != 0) {
                             offset=imsx*(position_y+i)+position_x;
-                            if (offset >= (imsx*imsy))
+                            if ((offset < 0) || (offset >= (imsx*imsy)))
                               {
                                 imbuf = (unsigned char *) RelinquishMagickMemory(imbuf);
                                 return (MagickFalse);
@@ -515,7 +515,7 @@ MagickBooleanType sixel_decode(Image *image,
                             }
                             for (y = position_y + i; y < position_y + i + n; ++y) {
                                 offset=imsx*y+position_x;
-                                if ((offset+repeat_count) >= (imsx*imsy))
+                                if ((offset < 0) || ((offset+repeat_count) >= (imsx*imsy)))
                                   {
                                     imbuf = (unsigned char *) RelinquishMagickMemory(imbuf);
                                     return (MagickFalse);
@@ -745,7 +745,8 @@ static MagickBooleanType sixel_encode_impl(unsigned char *pixels, size_t width,s
     if (ncolors < 1) {
         return (MagickFalse);
     }
-    len = ncolors * width;
+    if (HeapOverflowSanityCheckGetSize(ncolors,width,&len) != MagickFalse)
+      return(MagickFalse);
     context->active_palette = (-1);
 
     if ((map = (unsigned char *)AcquireQuantumMemory(len, sizeof(unsigned char))) == NULL) {
@@ -1296,7 +1297,7 @@ static MagickBooleanType WriteSIXELImage(const ImageInfo *image_info,
   opacity=(-1);
   if (image->matte == MagickFalse)
     {
-      if ((image->storage_class == DirectClass) || (image->colors > 256))
+      if ((image->storage_class == DirectClass) || (image->colors > SIXEL_PALETTE_MAX))
         (void) SetImageType(image,PaletteType);
     }
   else
@@ -1308,7 +1309,7 @@ static MagickBooleanType WriteSIXELImage(const ImageInfo *image_info,
       /*
         Identify transparent colormap index.
       */
-      if ((image->storage_class == DirectClass) || (image->colors > 256))
+      if ((image->storage_class == DirectClass) || (image->colors > SIXEL_PALETTE_MAX))
         (void) SetImageType(image,PaletteBilevelMatteType);
       for (i=0; i < (ssize_t) image->colors; i++)
         if (image->colormap[i].opacity != OpaqueOpacity)
@@ -1347,6 +1348,8 @@ static MagickBooleanType WriteSIXELImage(const ImageInfo *image_info,
           image->colormap[opacity].blue=image->transparent_color.blue;
         }
     }
+  if (image->colors > SIXEL_PALETTE_MAX)
+    return(MagickFalse);
   /*
     SIXEL header.
   */
